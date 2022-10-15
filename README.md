@@ -77,8 +77,9 @@ framework to make it easier to rearrange your site.
 
 All arguments are named.
 
-Note that named arguments with no default value are required; those
-with a default value provided are optional.
+Named arguments with no default value provided (e.g. `category`)
+are required; those with a default value provided (e.g. `color:
+nil` are optional.
 
 ### Specifying categories
 
@@ -109,7 +110,9 @@ you `setHiddenCategory` then it will additionally move the category
 to the specified different parent category specifically for holding
 the hidden categories.
 
-If you use this method, it will probably be the first method called.
+If you use this method, it will probably be the first method called,
+unless you actually want to have different hidden categories for
+different categories being hidden.
 
 ### describe
 
@@ -135,7 +138,7 @@ def redirect(url:, category:)
 ```yaml
 - redirect:
     url: /url/path # not the full URL; the path is called "url" internally
-    category: 20 $ ID
+    category: 20 # ID
 ```
 
 This specifically does a redirect to a category. Note that when moving
@@ -273,9 +276,10 @@ movePosts: {:source=>3, :withTag=>"faq", :target=>6}
 ==========
 ```
 
-If you need to add more actions, you can fork this repository, add the actions
-you want, and clone it in the same way but from your fork.  Alternatively,
-you can just edit it and copy it into the same location without cloning.
+If you need to add more actions, you can fork this repository,
+add the actions you want, and clone it into the location, but
+from your fork.  Alternatively, you can just edit it and copy your
+changed version into the same location without cloning.
 
 For example, if you want to permanently delete all topics in a
 category, you might define a `destroyAllInCategory` action, like this:
@@ -286,3 +290,11 @@ category, you might define a `destroyAllInCategory` action, like this:
   end
 ```
 
+By adding only those three lines to the `Operations` class, you
+will be able to add lines like the following to your YAML file:
+
+```yaml
+- destroyAllInCategory:
+    context: Everything in the Foo category must be permanently destroyed
+    category: 32 # Foo
+```
