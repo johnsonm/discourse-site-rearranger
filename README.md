@@ -55,7 +55,7 @@ as a debugging aid.  This could be done by appending lines near
 the end of the script that look like:
 
 ```ruby
-ops.describe(context: "Old Name", category: 7, name: "New Name, description: "New description of category", slug: "new-slug")
+ops.describe(context: "Old Name", category: 7, name: "New Name", description: "New description of category", slug: "new-slug")
 ops.movePosts(context: "move only faq posts from the Support category to the Documentation category", source: 3, target: 6, withTag: "faq", hide: false)
 ops.movePosts(context: "consolidate How-To category into documentation with how-to tag", source: 8, target: 6, addTag: "how-to", hide: true)
 ```
