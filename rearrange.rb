@@ -99,6 +99,16 @@ class Operations
     c.save!
   end
 
+  def publicCategoriesReadonly()
+    g = Guardian.new # anonymous
+    Category.all.each do |c|
+      if g.can_see_category?(c)
+        c.set_permissions({:everyone => :readonly, :admins => :full})
+        c.save
+      end
+    end
+  end
+
   def removeTagInCategory(category:, tag:)
     t = Tag.find_by_name(tag)
     t.topics.where(category_id: category).each do |topic|

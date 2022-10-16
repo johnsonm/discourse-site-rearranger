@@ -204,6 +204,20 @@ def exposeCategory(category:)
 The inverse of `hideCategory`; gives `full` permissions to `everyone` 
 for that category.
 
+### publicCategoriesReadonly
+
+```ruby
+def publicCategoriesReadonly()
+```
+
+```yaml
+- publicCategoriesReadonly:
+```
+
+Make all publicly-accessible categories read-only. Useful if you want users to
+log into a staging site to view content but not accidentally post there instead
+of the main site.
+
 ### removeTagInCategory
 
 ```ruby
