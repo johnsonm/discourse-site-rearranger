@@ -5,54 +5,16 @@ require 'yaml'
 #
 # scripts/rearrange.rb rearrange.yaml
 #
-# rearrange.yaml Format:
-# ---
-# - operationName:
-#     context: optional string to print but otherwise ignore
-#     arg1: value
-#     arg2: value
-# - nextOpName:
-#     arg1: value
-#     arg2: value
-#
-# For example, it might look like this:
-# ---
-# - describe:
-#     context: Old Name
-#     category: 7
-#     name: New Name
-#     description: New description of category
-#     slug: new-slug
-# - movePosts:
-#     context: move only faq posts from the Support category to the Documentation category
-#     source: 3 # Support category ID
-#     target: 6 # Documentation category ID
-#     withTag: faq
-#     hide: false # do not hide the Support category when done
-# - movePosts:
-#     context: consolidate How-To category into documentation with how-to tag
-#     source: 8 # How-To category ID
-#     target: 6 # Documentation category ID
-#     addTag: how-to
-#     hide: true # hide the old How-To category, visible only to Admin
-#
-# The operations are class method names, and the arguments are the keyword
-# arguments taken by the operation. The `context` is printed as a debugging aid.
-# This could be done by appending lines to this script that look like:
-#
-#     ops.describe(context: "Old Name", category: 7, name: "New Name, description: "New description of category", slug: "new-slug")
-#     ops.movePosts(context: "move only faq posts from the Support category to the Documentation category", source: 3, target: 6, withTag: "faq", hide: false)
-#
-# but the YAML file is easier.
-#
-#
 
 class Operations
   def describe(category:, name: nil, description: nil, color: nil, slug: nil)
     c = Category.find(category)
     c.name = name unless name.nil?
     c.description = description unless description.nil?
-    c.slug = slug unless slug.nil?
+    unless slug.nil?
+      c.slug = slug
+      @slugTagRedirects[category] = category
+    end
     c.color = color unless color.nil?
     c.rename_category_definition
     c.save
@@ -80,6 +42,7 @@ class Operations
     url = Category.find(source).url
     self.redirect(url: url, category: target) if redirect
     self.hideCategory(category: source) if hide
+    @slugTagRedirects[source] =  target if hide or redirect
   end
 
   def setHiddenCategory(category:)
@@ -133,11 +96,67 @@ class Operations
     c.save
   end
 
-  def init(config:)
-    @cfg = YAML.load(File.read(config))
+  def _formatSlugTag(c)
+    if c.slug_path.length == 1
+      return sprintf("#%s", c.slug)
+    else
+      return sprintf("#%s:%s", *c.slug_path)
+    end
   end
 
-  def announce(op:, args:)
+  def _loadSlugTags()
+    tags = {}
+    Category.all.each do |c|
+      tags[c.id] = _formatSlugTag(c)
+    end
+    tags
+  end
+
+  def _remapSlugs()
+    # remap all existing slugs with ":" in them before any parent-only slugs
+    # note that the parent-only slugs will cover parent slug changed but child
+    # slug not changed
+    childSourceMappings = []
+    parentSourceMappings = []
+    allSourceTags = []
+    @slugTagRedirects.each do |source, target|
+      from = @startTags[source]
+      to = _formatSlugTag(Category.find(target))
+      if from.include? ':'
+        childSourceMappings.append([from, to])
+      else
+        parentSourceMappings.append([from, to])
+      end
+      allSourceTags.append(Regexp.escape(from))
+    end
+    sourceMappings = childSourceMappings + parentSourceMappings
+    sourceMappings.each do |from, to|
+      $stderr.puts sprintf('mapping %s to %s', from, to)
+    end
+
+    findRe = "(" + allSourceTags.join("|") + ")"
+    Post.raw_match(findRe, 'regex').find_each do |p|
+      raw = p.raw
+      sourceMappings.each do |from, to|
+        raw = raw.gsub(from, to)
+      end
+      if raw == p.raw
+        # No case-sensitive option available, Discourse uses ILIKE
+        $stderr.puts "Not changed: " + p.url
+      else
+        $stderr.puts "Changed: " + p.url
+        p.revise(Discourse.system_user, { raw: raw }, bypass_bump: true, skip_revision: true)
+      end
+    end
+  end
+
+  def init(config:)
+    @cfg = YAML.load(File.read(config))
+    @startTags = self._loadSlugTags() # category => original slug text
+    @slugTagRedirects = {} # source => target category IDs; source==target for changed slug
+  end
+
+  def _announce(op:, args:)
     context = args.delete(:context)
     $stderr.puts "=========="
     $stderr.puts context unless context.nil?
@@ -149,13 +168,14 @@ class Operations
     @cfg.each do |item|
       op = item.keys[0]
       args = item[op].transform_keys(&:to_sym)
-      args = self.announce(op: op, args: args)
+      args = self._announce(op: op, args: args)
       self.send(op, **args)
     end
   end
 
   def finalize
     Category.update_stats
+    self._remapSlugs
   end
 end
 
