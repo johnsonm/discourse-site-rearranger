@@ -261,6 +261,52 @@ def reparentCategory(category:, parent:, recolor: true)
 Make the `category:` be a sub-category of `parent:` and optionally (by default)
 change the color associated with `category:` to match the color of `parent:`
 
+### migrateRetortToReactions
+
+```ruby
+def migrateRetortToReactions(allowed:, likes: nil, emojimap: nil)
+```
+
+```yaml
+- migrateRetortToReactions:
+    allowed:
+      - rofl
+      - astonished
+      - crossed_fingers
+      - sob
+      - thinking
+      - grimacing
+      - frowning_face
+      - drum
+    likes:
+      - dart
+      - +1
+      - joy
+      - "100"
+      - brain
+      - heart
+      - heart_eyes
+      - hearts
+    emojimap:
+      rage: sob
+      four_leaf_clover: crossed_fingers
+      cry: sob
+      open_mouth: astonished
+      scream: frowning_face
+```
+
+Migrate select Retort responses to Reactions.  The `allowed:` emoji
+must match the site configured Reactions.  All the `likes:` will be
+mapped to a like action, and other allowed Retort emoji will be translated
+to the equivalent Reaction emoji response.  Keys in `emojimap:` will be
+translated to their associated values, which must be in the `allowed:`
+set which must match the site configuration.
+
+If there is more than one matching Retort for a user on a post, the
+result of this code is not specified, it is processed by the natural
+order of PostDetail records and so should be consistent from one run
+to another, but is not otherwise prioritized.
+
 ### Usage
 
 If these methods already cover all of your needs, you can

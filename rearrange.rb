@@ -96,6 +96,52 @@ class Operations
     c.save
   end
 
+  def migrateRetortToReactions(allowed:, likes: nil, emojimap: nil)
+    # migrate where possible without overriding any existing likes
+    # this is a necessarily lossy conversion, and is consistent only by ordering of PostDetail
+    # no attempt is made to prefer one PostDetail record over another
+    emojimap = {} if emojimap.nil?
+    allowed.each do |a|
+      emojimap[a] = a
+    end
+    retort = "retort".freeze
+    emojiType = "emoji".freeze
+    usermap = Hash.new { |hash, username| hash[username] = User.find_by_username(username) }
+    postmap = Hash.new { |hash, post_id| hash[post_id] = Post.find(post_id) }
+    likeType = PostActionType.where(name_key: "like").pluck(:id).first
+
+    PostDetail.where(extra: retort).each do |pd|
+      begin
+        p = postmap[pd.post_id]
+      rescue
+        # PostDetail not consistent WRT delete
+        $stderr.puts sprintf("Could not find post for %d: %s / %s", pd.post_id, pd.key, pd.value)
+        next
+      end
+      emoji = pd.key.split('|').first
+      users = JSON.parse(pd.value)
+      users.each do |user|
+        u = usermap[user]
+        next if u.nil? # changed user name or deleted user leaves orphaned Retorts
+        if likes.include?(emoji)
+          pa = PostAction.where(post_id: p.id, user_id: u.id, post_action_type_id: likeType).first
+          next unless pa.nil?
+          $stderr.puts sprintf("Adding like for Retort %s for user %s in %s", emoji, user, p.url)
+          PostActionCreator.create(u, p, :like, created_at: pd.created_at, silent: true)
+        elsif emojimap.has_key?(emoji)
+          e = emojimap[emoji]
+          r = DiscourseReactions::Reaction.where(post_id: p.id, reaction_type: emojiType, reaction_value: e).first_or_create
+          ru = DiscourseReactions::ReactionUser.where(user_id: u.id, post_id: p.id).first
+          next unless ru.nil?
+          $stderr.puts sprintf("Converting Retort %s to Reaction %s for user %s in %s", emoji, e, user, p.url)
+          DiscourseReactions::ReactionUser.create(reaction_id: r.id, user_id: u.id, post_id: p.id, created_at: pd.created_at)
+        else
+          $stderr.puts sprintf("Ignoring unmapped Retort %s for user %s in %s", emoji, user, p.url)
+        end
+      end
+    end
+  end
+
   def _formatSlugTag(c)
     if c.slug_path.length == 1
       return sprintf("#%s", c.slug)
@@ -116,6 +162,8 @@ class Operations
     # remap all existing slugs with ":" in them before any parent-only slugs
     # note that the parent-only slugs will cover parent slug changed but child
     # slug not changed
+    return if @slugTagRedirects.length == 0
+
     childSourceMappings = []
     parentSourceMappings = []
     allSourceTags = []
